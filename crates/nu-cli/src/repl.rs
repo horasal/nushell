@@ -14,6 +14,7 @@ use nu_color_config::StyleComputer;
 use nu_engine::convert_env_values;
 use nu_parser::{lex, parse, trim_quotes_str};
 use nu_protocol::{
+    ast::Pipeline,
     config::NuCursorShape,
     engine::{EngineState, Stack, StateWorkingSet},
     eval_const::create_nu_constant,
@@ -484,6 +485,36 @@ pub fn evaluate_repl(
 
                 if shell_integration {
                     run_ansi_sequence(PRE_EXECUTE_MARKER)?;
+                    if let Some(hook) = config.hooks.pre_title.clone() {
+                        match eval_hook(
+                            engine_state,
+                            stack,
+                            None,
+                            vec![(
+                                "command".into(),
+                                Value::String {
+                                    val: s.clone(),
+                                    internal_span: Span::unknown(),
+                                },
+                            )],
+                            &hook,
+                            "pre_title",
+                        )
+                        .and_then(|data| data.into_value(hook.span()).as_string())
+                        {
+                            Ok(title) => {
+                                // https://tldp.org/HOWTO/Xterm-Title-3.html
+                                // ESC]0;stringBEL -- Set icon name and window title to string
+                                // ESC]1;stringBEL -- Set icon name to string
+                                // ESC]2;stringBEL -- Set window title to string
+                                run_ansi_sequence(&format!("\x1b]2;{title}\x07"))?;
+                            }
+                            Err(error) => {
+                                let working_set = StateWorkingSet::new(engine_state);
+                                report_error(&working_set, &error);
+                            }
+                        }
+                    }
                 }
 
                 let start_time = Instant::now();
@@ -626,20 +657,32 @@ pub fn evaluate_repl(
                                 percent_encoding::CONTROLS
                             )
                         ))?;
-
-                        // Try to abbreviate string for windows title
-                        let maybe_abbrev_path = if let Some(p) = nu_path::home_dir() {
-                            path.replace(&p.as_path().display().to_string(), "~")
-                        } else {
-                            path
-                        };
-
-                        // Set window title too
-                        // https://tldp.org/HOWTO/Xterm-Title-3.html
-                        // ESC]0;stringBEL -- Set icon name and window title to string
-                        // ESC]1;stringBEL -- Set icon name to string
-                        // ESC]2;stringBEL -- Set window title to string
-                        run_ansi_sequence(&format!("\x1b]2;{maybe_abbrev_path}\x07"))?;
+                    }
+                    if let Some(hook) = config.hooks.post_title.clone() {
+                        match eval_hook(
+                            engine_state,
+                            stack,
+                            None,
+                            vec![(
+                                "command".into(),
+                                Value::String {
+                                    val: s.clone(),
+                                    internal_span: Span::unknown(),
+                                },
+                            )],
+                            &hook,
+                            "post_title",
+                        )
+                        .and_then(|data| data.into_value(hook.span()).as_string())
+                        {
+                            Ok(title) => {
+                                run_ansi_sequence(&format!("\x1b]2;{title}\x07"))?;
+                            }
+                            Err(error) => {
+                                let working_set = StateWorkingSet::new(engine_state);
+                                report_error(&working_set, &error);
+                            }
+                        }
                     }
                     run_ansi_sequence(RESET_APPLICATION_MODE)?;
                 }

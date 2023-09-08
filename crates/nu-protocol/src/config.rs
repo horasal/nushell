@@ -30,6 +30,8 @@ pub struct ParsedMenu {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Hooks {
     pub pre_prompt: Option<Value>,
+    pub pre_title: Option<Value>,
+    pub post_title: Option<Value>,
     pub pre_execution: Option<Value>,
     pub env_change: Option<Value>,
     pub display_output: Option<Value>,
@@ -40,6 +42,8 @@ impl Hooks {
     pub fn new() -> Self {
         Self {
             pre_prompt: None,
+            pre_title: None,
+            post_title: None,
             pre_execution: None,
             env_change: None,
             display_output: Some(Value::string(
@@ -1261,6 +1265,12 @@ impl Value {
                             if let Some(ref value) = config.hooks.pre_execution {
                                 hook.push("pre_execution", value.clone());
                             }
+                            if let Some(ref value) = config.hooks.pre_title {
+                                hook.push("pre_title", value.clone());
+                            }
+                            if let Some(ref value) = config.hooks.post_title {
+                                hook.push("post_title", value.clone());
+                            }
                             if let Some(ref value) = config.hooks.env_change {
                                 hook.push("env_change", value.clone());
                             }
@@ -1472,13 +1482,15 @@ fn create_hooks(value: &Value) -> Result<Hooks, ShellError> {
             for (col, val) in val {
                 match col.as_str() {
                     "pre_prompt" => hooks.pre_prompt = Some(val.clone()),
+                    "pre_title" => hooks.pre_title = Some(val.clone()),
+                    "post_title" => hooks.post_title = Some(val.clone()),
                     "pre_execution" => hooks.pre_execution = Some(val.clone()),
                     "env_change" => hooks.env_change = Some(val.clone()),
                     "display_output" => hooks.display_output = Some(val.clone()),
                     "command_not_found" => hooks.command_not_found = Some(val.clone()),
                     x => {
                         return Err(ShellError::UnsupportedConfigValue(
-                            "'pre_prompt', 'pre_execution', 'env_change', 'display_output', 'command_not_found'"
+                            "'pre_prompt', 'pre_title', 'post_title', 'pre_execution', 'env_change', 'display_output', 'command_not_found'"
                                 .to_string(),
                             x.to_string(),
                             span,
